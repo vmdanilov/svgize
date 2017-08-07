@@ -1,0 +1,67 @@
+#!/bin/sh
+
+cmd="$(basename "$0")"
+quality="75"
+output=""
+
+if [ ! -x "$(command -v convert 2>/dev/null)" ]; then
+    echo "ImageMagick is required."
+    exit 1
+fi
+
+# Print usage info
+usage() {
+  echo "Usage: $cmd [options] image-file"
+  echo "Options:"
+  echo "  -h, --help          show help"
+  echo "  -q, --quality size  JPEG quality setting (default=75)"
+  echo "  -o, --output file   output file path"
+}
+
+# Handle input
+while :; do
+  case $1 in
+    -h | --help )
+      usage
+      exit 0
+      ;;
+    -q | --quality )
+      quality="$2"
+      shift
+      ;;
+    -o | --output )
+      output="$2"
+      shift
+      ;;
+    "" )
+      usage
+      exit 0
+      ;;
+    * )
+    break
+  esac
+  shift
+done
+
+if [ "$#" -lt 1 ] || ([ ! -z "$output" ] && [ "$#" -gt 1 ]); then
+    usage
+    exit 1
+fi
+
+for file in "$@"; do
+	size=( $(identify -format '%w %h' "$file") )
+	image="data:image/jpeg;base64,$(convert "$file" -set colorspace sRGB -background black -alpha background -alpha off -colorspace YUV -sampling-factor 4:2:0 -quality $quality jpeg:- | base64)"
+	mask="data:image/jpeg;base64,$(convert "$file" -set colorspace RGB -alpha extract -colorspace gray -sampling-factor 4:4:4 -quality $quality jpeg:- | base64)"
+
+	cat >"${output:=${file%.*}.svg}" <<EOL
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size[0]}" height="${size[1]}" viewBox="0 0 ${size[0]} ${size[1]}">
+    <defs>
+        <mask id="m">
+            <image width="100%" height="100%" xlink:href="$mask"/>
+        </mask>
+    </defs>
+    <image mask="url(#m)" width="100%" height="100%" xlink:href="$image"/>
+</svg>
+EOL
+
+done
