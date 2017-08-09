@@ -4,6 +4,8 @@ cmd="$(basename "$0")"
 quality="75"
 output=""
 
+export PATH="$PATH:$(dirname "$0")"
+
 if [ ! -x "$(command -v convert 2>/dev/null)" ]; then
     echo "ImageMagick is required."
     exit 1
