@@ -2,7 +2,10 @@
 
 cmd="$(basename "$0")"
 quality="75"
+mask_quality="100"
+mask_type="png"
 output=""
+embed=true
 
 export PATH="$PATH:$(dirname "$0")"
 
@@ -15,9 +18,10 @@ fi
 usage() {
   echo "Usage: $cmd [options] image-file"
   echo "Options:"
-  echo "  -h, --help          show help"
-  echo "  -q, --quality size  JPEG quality setting (default=75)"
-  echo "  -o, --output file   output file path"
+  echo "  -h, --help                   Show this help message and exit"
+  echo "  -q, --quality value[:value]  Set compression quality for layer and mask respectively (75:100)"
+  echo "  -l, --link                   Save layer and mask separately, otherwise inline using base64 encoding"
+  echo "  -o, --output name            Specify name for output file"
 }
 
 # Handle input
@@ -28,12 +32,17 @@ while :; do
       exit 0
       ;;
     -q | --quality )
-      quality="$2"
+      quality="${2%%:*}"
+      mask_quality="${2##*:}"
+      mask_quality="${mask_quality:=$quality}"
       shift
       ;;
     -o | --output )
       output="$2"
       shift
+      ;;
+    -l | --link )
+      embed=false
       ;;
     "" )
       usage
@@ -50,12 +59,57 @@ if [ "$#" -lt 1 ] || ([ ! -z "$output" ] && [ "$#" -gt 1 ]); then
     exit 1
 fi
 
-for file in "$@"; do
-	size=( $(identify -format '%w %h' "$file") )
-	image="data:image/jpeg;base64,$(convert "$file" -set colorspace sRGB -background black -alpha background -alpha off -colorspace YUV -sampling-factor 4:2:0 -quality $quality jpeg:- | base64)"
-	mask="data:image/jpeg;base64,$(convert "$file" -set colorspace RGB -alpha extract -colorspace gray -sampling-factor 4:4:4 -quality $quality jpeg:- | base64)"
+cmd_layer_magick() {
+  convert - -set colorspace sRGB -background black -alpha background -alpha off -colorspace YUV -sampling-factor 4:2:0 -quality $quality jpeg:-
+}
 
-	cat >"${output:=${file%.*}.svg}" <<EOL
+cmd_layer_mozjpeg() {
+  convert - -set colorspace sRGB -background black -alpha background -alpha off ppm:- | cjpeg -quality $quality -sample 2x2
+}
+
+cmd_mask_magick() {
+  convert - -set colorspace sRGB -alpha extract -colorspace gray -sampling-factor 4:4:4 -quality $quality jpeg:-
+}
+
+cmd_mask_mozjpeg() {
+  convert - -set colorspace sRGB -alpha extract ppm:- | cjpeg -quality $mask_quality -grayscale -sample 1x1
+}
+
+cmd_mask_lossless() {
+  convert - -set colorspace sRGB -alpha extract -colorspace gray -define png:compression-level=9 -define png:compression-filter=5 png:-
+}
+
+
+cmd_layer="cmd_layer_magick"
+cmd_mask="cmd_mask_magick"
+
+if [ -x "$(command -v cjpeg 2>/dev/null)" ] && [ ! -n "$(cjpeg -version 2>/dev/null | grep mozjpeg)" ]; then
+  cmd_layer="cmd_layer_mozjpeg"
+  cmd_mask="cmd_mask_mozjpeg"
+fi
+
+if [ "$mask_quality" -ge 100 ]; then
+  cmd_mask="cmd_mask_lossless"
+  mask_type="png"
+else
+  mask_type="jpeg"
+fi
+
+for file in "$@"; do
+  outfile="${output:=${file%.*}.svg}"
+	size=( $(identify -format '%w %h' "$file") )
+
+  if $embed; then
+    image="data:image/jpeg;base64,$(cat "$file" | $cmd_layer | base64)"
+    mask="data:image/$mask_type;base64,$(cat "$file" | $cmd_mask | base64)"
+  else
+    image_file="$outfile-layer.jpg"
+    mask_file="$outfile-mask.${mask_type/jpeg/jpg}"
+    image="$(cat "$file" | $cmd_layer | cat >"$image_file" | echo $(basename "$image_file"))"
+    mask="$(cat "$file" | $cmd_mask | cat >"$mask_file" | echo $(basename "$mask_file"))"
+  fi
+
+	cat >"$outfile" <<EOL
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size[0]}" height="${size[1]}" viewBox="0 0 ${size[0]} ${size[1]}">
     <defs>
         <mask id="m">

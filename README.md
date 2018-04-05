@@ -25,18 +25,19 @@ Run `svgize` on transparent images in Terminal:
 ```
 Usage: svgize [options] image-file
 Options:
-  -h, --help          show help
-  -q, --quality size  JPEG quality setting (default=75)
-  -o, --output file   output file path
+  -h, --help                   Show this help message and exit
+  -q, --quality value[:value]  Set compression quality for layer and mask respectively (75:100)
+  -l, --link                   Save layer and mask separately, otherwise inline using base64 encoding
+  -o, --output name            Specify name for output file
 ```
 
-Output SVG image is a composition of YUV 4:2:0 JPEG image and grayscale JPEG image used as a mask.
+Output SVG image is a composition of YUV 4:2:0 JPEG image and grayscale PNG/JPEG image used as a mask.
 
 ```
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="width" height="height" viewBox="0 0 width height">
     <defs>
         <mask id="m">
-            <image width="100%" height="100%" xlink:href="data:image/jpeg;base64,..."/>
+            <image width="100%" height="100%" xlink:href="data:image/png;base64,..."/>
         </mask>
     </defs>
     <image mask="url(#m)" width="100%" height="100%" xlink:href="data:image/jpeg;base64,..."/>
