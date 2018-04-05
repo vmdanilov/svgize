@@ -112,7 +112,7 @@ for file in "$@"; do
 	cat >"$outfile" <<EOL
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size[0]}" height="${size[1]}" viewBox="0 0 ${size[0]} ${size[1]}">
     <defs>
-        <mask id="m">
+        <mask id="m" color-interpolation="sRGB">
             <image width="100%" height="100%" xlink:href="$mask"/>
         </mask>
     </defs>
